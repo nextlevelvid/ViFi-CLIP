@@ -18,4 +18,8 @@ setup(
         "yacs",
         "pandas",
     ],
+    package_data={
+        "vificlip.clip": ["bpe_simple_vocab_16e6.txt.gz"],
+    },
+    include_package_data=True,
 )

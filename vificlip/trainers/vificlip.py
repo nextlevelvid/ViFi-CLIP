@@ -7,8 +7,8 @@ import torch.nn as nn
 from torch.nn import functional as F
 from torch.cuda.amp import GradScaler, autocast
 
-from clip import clip
-from clip.simple_tokenizer import SimpleTokenizer as _Tokenizer
+from vificlip.clip import clip
+from vificlip.clip.simple_tokenizer import SimpleTokenizer as _Tokenizer
 
 _tokenizer = _Tokenizer()
 

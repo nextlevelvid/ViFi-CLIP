@@ -8,7 +8,7 @@ setup(
         "torch",
         "torchvision",
         "pathlib",
-        "mmcv",
+        "mmcv==1.7.2",
         "eva-decord",
         "ftfy",
         "einops",

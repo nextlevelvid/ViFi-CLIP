@@ -15,7 +15,6 @@ import os.path as osp
 import mmcv
 import numpy as np
 import torch
-import tarfile
 import timm.data as tdata
 from torch.nn.modules.utils import _pair
 import random
@@ -1791,19 +1790,8 @@ class DecordInit:
         except ImportError:
             raise ImportError(
                 'Please run "pip install decord" to install Decord first.')
-        if results['tar'] is False:
-            if self.file_client is None:
-                self.file_client = FileClient(self.io_backend, **self.kwargs)
-            file_obj = io.BytesIO(self.file_client.get(results['filename']))
-        else:
-            if self.tarfile is None:
-                data_root = os.path.dirname(results['filename']) + '.tar'
-                self.tarfile = tarfile.open(data_root)
-            video_name = results['filename'].split('/')[-1]
-            iob = self.tarfile.extractfile(video_name)
-            iob = iob.read()
-            file_obj = io.BytesIO(iob)
-        container = decord.VideoReader(file_obj, num_threads=self.num_threads)
+        video_obj =  io.BytesIO(results['video'])
+        container = decord.VideoReader(video_obj, num_threads=self.num_threads)
         results['video_reader'] = container
         results['total_frames'] = len(container)
         return results

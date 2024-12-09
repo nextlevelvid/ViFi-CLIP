@@ -164,16 +164,16 @@ class VLPromptLearner(nn.Module):
 class ViFiCLIP(nn.Module):
     def __init__(self, cfg, classnames, clip_model, logger):
         super().__init__()
-        self.prompt_learner = VLPromptLearner(cfg, classnames, clip_model, logger)
-        self.tokenized_prompts = self.prompt_learner.tokenized_prompts
+        # TODO: Can I remove the text features as a whole
+        # self.prompt_learner = VLPromptLearner(cfg, classnames, clip_model, logger)
+        # self.tokenized_prompts = self.prompt_learner.tokenized_prompts
         self.image_encoder = clip_model.visual
-        self.text_encoder = TextEncoder(clip_model)
-        self.logit_scale = clip_model.logit_scale
-        self.dtype = clip_model.dtype
+        # self.text_encoder = TextEncoder(clip_model)
+        # self.logit_scale = clip_model.logit_scale
     def forward(self, image):
-        tokenized_prompts = self.tokenized_prompts
-        logit_scale = self.logit_scale.exp()
-        prompts = self.prompt_learner()
+        # tokenized_prompts = self.tokenized_prompts
+        # logit_scale = self.logit_scale.exp()
+        # prompts = self.prompt_learner()
 
         # b = image.shape[0]
         # Lets encode the video into required format
@@ -181,20 +181,24 @@ class ViFiCLIP(nn.Module):
         # Remove the batch dimensions
         image = image.reshape(-1, c, h, w)
         # Now pass the image into CLIP visual encoder
-        image_features = self.image_encoder(image.type(self.dtype))
+        image_features = self.image_encoder(image)
         # Now again attach the batch dimensions
         image_features = image_features.view(b, t, -1)  # [B, T, 512]
+
+        #TODO: Currently no averaging
         # Now take the mean along the temporal direction
-        image_features = image_features.mean(dim=1, keepdim=False)  # image features are now ready
+        # image_features = image_features.mean(dim=1, keepdim=False)  # image features are now ready
 
         # Finally, make the text features
-        text_features = self.text_encoder(prompts, tokenized_prompts)
+        # text_features = self.text_encoder(prompts, tokenized_prompts)
 
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-        logits = logit_scale * image_features @ text_features.t()
+        # text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+        # logits = logit_scale * image_features @ text_features.t()
 
-        return logits
+        # return logits
+        return image_features
+
 
 
 def returnCLIP(config, logger=None,
@@ -205,38 +209,23 @@ def returnCLIP(config, logger=None,
     logger.info("Building ViFi-CLIP CLIP")
     model = ViFiCLIP(config, class_names, clip_model, logger)
 
-    if config.TRAINER.ViFi_CLIP.PROMPT_MODEL:
-        logger.info("Turning off gradients in both the image and the text encoder")
-        name_to_update = "prompt_learner"
-        for name, param in model.named_parameters():
-            if name_to_update not in name:
-                # Make sure that VPT prompts are updated
-                if "VPT" in name:
-                    param.requires_grad_(True)
-                else:
-                    param.requires_grad_(False)
-    else:
-        # Now need to control freezing of CLIP for fine-tuning
-        train_complete_clip = config.TRAINER.ViFi_CLIP.USE
-        if train_complete_clip == "both":
-            logger.info("Turning on gradients for COMPLETE ViFi-CLIP model")
-            for name, param in model.named_parameters():
-                param.requires_grad_(True)
-        else:
-            if train_complete_clip == "image":
-                logger.info("Turning on gradients for image side the ViFi-CLIP model")
-                for name, param in model.named_parameters():
-                    if "image_encoder" in name:  # replace by "text_encoder" incase you want to freeze text
-                        param.requires_grad_(True)
-                    else:
-                        param.requires_grad_(False)
-            else:
-                logger.info("Turning on gradients for TEXT side the ViFi-CLIP model")
-                for name, param in model.named_parameters():
-                    if "text_encoder" in name:  # replace by "text_encoder" incase you want to freeze text
-                        param.requires_grad_(True)
-                    else:
-                        param.requires_grad_(False)
+    checkpoint = torch.load(config.MODEL.RESUME, map_location='cpu')
+    load_state_dict = checkpoint['model']
+    # now only pick the wanted weights
+    state_dict = OrderedDict()
+    for k, v in load_state_dict.items():
+        if "image_encoder" in k:
+            name = k[7:] # remove `module.`
+            state_dict[name] = v
+
+
+    msg = model.load_state_dict(state_dict, strict=False)
+    logger.info(f"resume model: {msg}")
+
+    # Freeze model
+    for param in model.parameters():
+        param.requires_grad = False
+
     # Double check
     enabled = set()
     for name, param in model.named_parameters():
